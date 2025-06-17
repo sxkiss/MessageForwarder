@@ -1,0 +1,24 @@
+[basic]
+# 是否启用插件
+enable = true
+# 全局优先级设置 (0-99)，值越高优先级越高
+priority = 80
+
+[forwarder]
+# 转发目标类型: "user" 或 "group"
+target_type = "user"
+# 如果 target_type 为 "user", 填写目标用户的 wxid
+target_user_wxid = "filehelper" # 默认转发到文件助手，方便测试
+# 如果 target_type 为 "group", 填写目标群聊的 wxid
+target_group_wxid = ""
+
+[listen_source]
+# 监听源类型: "all", "user", "group"
+# "all": 监听所有消息
+# "user": 仅监听来自指定用户的消息
+# "group": 仅监听来自指定群聊的消息
+listen_type = "all"
+# 如果 listen_type 为 "user", 填写要监听的用户 wxid 列表，用逗号分隔
+listen_user_wxids = [] # 示例: ["wxid_xxxx", "wxid_yyyy"]
+# 如果 listen_type 为 "group", 填写要监听的群聊 wxid 列表，用逗号分隔
+listen_group_wxids = [] # 示例: ["chatroom_xxxx@chatroom", "chatroom_yyyy@chatroom"]
