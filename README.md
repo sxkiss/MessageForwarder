@@ -1,59 +1,124 @@
-# MessageForwarder
+# 消息转发插件
 
-## 项目简介
-MessageForwarder 是一个用于处理和转发消息的应用程序。它能够接收消息并将其转发到指定的接收者，适用于需要消息传递功能的各种场景。
+**作者**: sxkiss
+**版本**: 1.1.0
+**更新时间**: 2025-06-18
 
-## 目录结构
+## 描述
+这是一个功能强大的微信消息转发插件。它可以监听和转发多种类型的微信消息，包括文本、图片、视频、名片等，并支持灵活的监听源配置和转发目标设置。
+
+## 配置
+
+在 `config.toml` 文件中进行配置：
+
+```toml
+[basic]
+# 是否启用插件
+enable = true
+# 全局优先级设置 (0-99)，值越高优先级越高
+priority = 80
+
+[forwarder]
+# 转发目标类型: "user" 或 "group"
+target_type = "user"
+# 如果 target_type 为 "user", 填写目标用户的 wxid
+target_user_wxid = "filehelper" # 默认转发到文件助手，方便测试
+# 如果 target_type 为 "group", 填写目标群聊的 wxid
+target_group_wxid = ""
+
+[listen_source]
+# 监听类型: "all" (所有消息), "user" (指定用户), "group" (指定群聊)
+listen_type = "all"
+# 当 listen_type 为 "user" 时，指定要监听的用户 wxid 列表
+listen_user_wxids = []
+# 当 listen_type 为 "group" 时，指定要监听的群聊 wxid 列表
+listen_group_wxids = []
 ```
-MessageForwarder
-├── src
-│   ├── main
-│   │   ├── java
-│   │   │   └── com
-│   │   │       └── messageforwarder
-│   │   │           ├── config
-│   │   │           │   └── Config.java
-│   │   │           ├── core
-│   │   │           │   ├── Forwarder.java
-│   │   │           │   └── MessageHandler.java
-│   │   │           ├── model
-│   │   │           │   └── Message.java
-│   │   │           └── Application.java
-│   │   └── resources
-│   │       └── application.properties
-│   └── test
-│       └── java
-│           └── com
-│               └── messageforwarder
-│                   └── ForwarderTest.java
-├── pom.xml
-├── .gitignore
-└── README.md
-```
 
-## 安装与使用
-1. 克隆此仓库到本地：
-   ```bash
-   git clone https://github.com/yourusername/MessageForwarder.git
-   ```
-2. 进入项目目录：
-   ```bash
-   cd MessageForwarder
-   ```
-3. 使用 Maven 构建项目：
-   ```bash
-   mvn clean install
-   ```
-4. 运行应用程序：
-   ```bash
-   mvn spring-boot:run
-   ```
+## 功能特性
 
-## 依赖
-该项目使用 Maven 进行依赖管理，所有依赖项在 `pom.xml` 文件中列出。
+### 支持的消息类型
 
-## 贡献
-欢迎任何形式的贡献！请提交问题或拉取请求。
+1. **文本消息**
+   - 直接转发文本内容
+   - 支持@功能（群聊中）
 
-## 许可证
-此项目采用 MIT 许可证，详细信息请查看 LICENSE 文件。
+2. **图片消息**
+   - 转发Base64格式的图片内容
+   - 自动处理图片数据格式
+
+3. **视频消息**
+   - 支持两种转发方式：
+     - CDN视频消息直接转发（优先）
+     - Base64视频内容转发（备用）
+   - 自动生成视频缩略图
+   - 智能视频时长检测
+
+4. **名片消息 (MsgType=42)**
+   - 解析XML格式的名片信息
+   - 提取wxid、昵称、备注等信息
+   - 使用ShareCard API直接转发
+   - 支持群聊和私聊中的名片消息
+
+5. **其他消息类型**
+   - XML消息处理
+   - 文件消息信息提取
+   - 应用消息转发
+
+### 监听源配置
+
+- **全部监听** (`listen_type = "all"`)：转发所有接收到的消息
+- **用户监听** (`listen_type = "user"`)：只转发指定用户发送的消息
+- **群聊监听** (`listen_type = "group"`)：只转发指定群聊中的消息
+
+### 转发目标
+
+- **个人用户**：转发到指定的个人微信用户
+- **群聊**：转发到指定的微信群聊
+
+## 技术实现
+
+### 名片消息处理
+- 自动解析名片XML内容
+- 智能处理群聊中的名片消息前缀
+- 直接调用`/api/Msg/ShareCard` API确保兼容性
+- 完整的错误处理和日志记录
+
+### 视频消息优化
+- 优先使用CDN方式转发视频（速度快）
+- 备用Base64转发方式（兼容性好）
+- 自动提取视频首帧作为缩略图
+- 智能清理临时文件
+
+### 消息队列管理
+- 使用消息队列避免发送过快
+- 1秒发送间隔保护
+- 异步处理提高性能
+
+## 使用说明
+
+1. 复制 `config.toml.example` 为 `config.toml`
+2. 根据需要修改配置文件
+3. 启用插件即可开始转发消息
+
+## 注意事项
+
+- 名片转发使用直接API调用，确保最佳兼容性
+- 视频转发可能较慢，建议压缩视频或使用链接方式
+- 建议先使用文件助手测试功能
+- 监听源配置支持精确控制转发范围
+
+## 更新日志
+
+### v1.1.0 (2025-06-18)
+- **新增功能**: 支持名片消息转发 (MsgType=42)
+- **技术改进**: 直接调用ShareCard API，解决404错误问题
+- **优化**: 完善名片XML解析逻辑，支持群聊和私聊场景
+- **修复**: 修正API端点和参数结构，确保兼容性
+- **文档**: 更新完整的功能说明和配置指南
+
+### v1.0.0
+- 基础消息转发功能
+- 支持文本、图片、视频消息转发
+- 监听源配置功能
+- 转发目标设置
