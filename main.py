@@ -28,7 +28,7 @@ from utils.decorators import (
 class MessageForwarder(PluginBase):
     description = "消息转发插件"
     author = "sxkiss"
-    version = "1.1.0"
+    version = "1.2.0"
 
     def __init__(self):
         super().__init__()
@@ -305,6 +305,22 @@ class MessageForwarder(PluginBase):
                 except Exception as cleanup_error:
                     logger.error(f"清理临时视频文件失败: {cleanup_error}")
 
+    @on_xml_message(priority=10)
+    async def handle_xml_message(self, bot: WechatAPIClient, message: dict):
+        """处理XML消息，包括应用消息(类型49)"""
+        msg_type = message.get("MsgType")
+        xml_content = message.get("Content", "")
+        
+        logger.info(f"[MessageForwarder] 检测到XML消息: MsgType={msg_type}")
+        logger.debug(f"[MessageForwarder] XML内容: {xml_content[:200]}...")
+        
+        # 检查是否包含应用消息内容
+        if self._contains_appmsg(xml_content):
+            logger.info(f"[MessageForwarder] 检测到应用消息内容，准备转发")
+            await self._forward_app_message(bot, message, xml_content)
+        else:
+            logger.debug(f"[MessageForwarder] XML消息不包含应用消息内容，跳过转发")
+
     @on_other_message(priority=10)
     async def handle_other_message(self, bot: WechatAPIClient, message: dict):
         """处理其他类型消息，包括名片消息"""
@@ -316,6 +332,14 @@ class MessageForwarder(PluginBase):
             # 先预处理名片消息，设置正确的FromWxid和SenderWxid字段
             self._preprocess_card_message(message)
             await self.handle_card_message(bot, message)
+        # 检查是否为应用消息 (MsgType=49)
+        elif msg_type == 49:
+            logger.info(f"[MessageForwarder] 检测到应用消息: MsgType={msg_type}")
+            xml_content = message.get("Content", "")
+            if self._contains_appmsg(xml_content):
+                await self._forward_app_message(bot, message, xml_content)
+            else:
+                logger.debug(f"[MessageForwarder] 类型49消息不包含应用消息内容，跳过转发")
         else:
             logger.debug(f"[MessageForwarder] 收到其他类型消息: MsgType={msg_type}")
 
@@ -456,6 +480,75 @@ class MessageForwarder(PluginBase):
             message["SenderWxid"] = from_wxid
 
         logger.debug(f"[MessageForwarder] 名片消息预处理完成: FromWxid={message['FromWxid']}, ToWxid={message['ToWxid']}, SenderWxid={message['SenderWxid']}, IsGroup={message.get('IsGroup', False)}")
+
+    def _contains_appmsg(self, xml_content: str) -> bool:
+        """检查XML内容是否包含应用消息"""
+        if not xml_content:
+            return False
+        
+        # 检查是否包含<appmsg>标签
+        return "<appmsg" in xml_content.lower()
+    
+    def _extract_appmsg_content(self, xml_content: str) -> Optional[str]:
+        """从XML内容中提取<appmsg>部分"""
+        try:
+            logger.debug(f"[MessageForwarder] 开始提取appmsg内容: {xml_content[:200]}...")
+            
+            # 移除可能的前缀（如：发送者id:\n<xml...>）
+            clean_xml = xml_content
+            if ":\n" in xml_content:
+                clean_xml = xml_content.split(":\n", 1)[1].strip()
+                logger.debug(f"[MessageForwarder] 移除前缀后的XML: {clean_xml[:200]}...")
+            
+            # 解析XML
+            root = ET.fromstring(clean_xml)
+            
+            # 查找appmsg元素
+            appmsg_element = root.find(".//appmsg")
+            if appmsg_element is not None:
+                # 将appmsg元素转换为字符串
+                appmsg_content = ET.tostring(appmsg_element, encoding='unicode')
+                logger.debug(f"[MessageForwarder] 成功提取appmsg内容: {appmsg_content[:200]}...")
+                return appmsg_content
+            else:
+                logger.warning(f"[MessageForwarder] 未找到appmsg元素")
+                return None
+                
+        except ET.ParseError as e:
+            logger.error(f"[MessageForwarder] XML解析失败: {e}")
+            logger.debug(f"[MessageForwarder] 失败的XML内容: {xml_content}")
+            return None
+        except Exception as e:
+            logger.error(f"[MessageForwarder] 提取appmsg内容时发生未知错误: {e}")
+            logger.debug(f"[MessageForwarder] 失败的XML内容: {xml_content}")
+            return None
+    
+    async def _forward_app_message(self, bot: WechatAPIClient, message: dict, xml_content: str):
+        """转发应用消息"""
+        if not self._is_message_allowed(message):
+            logger.debug(f"消息来自未监听的源，跳过转发: {message.get('FromWxid')}")
+            return
+
+        if not self.target_wxid:
+            logger.warning("未配置转发目标WXID，无法转发消息。")
+            return
+
+        try:
+            # 提取appmsg内容
+            appmsg_content = self._extract_appmsg_content(xml_content)
+            if not appmsg_content:
+                logger.warning("[MessageForwarder] 无法提取appmsg内容，使用原始XML转发")
+                appmsg_content = xml_content
+            
+            # 使用send_app_message转发，类型49
+            await bot.send_app_message(self.target_wxid, appmsg_content, 49)
+            
+            msg_type_display = message.get('MsgType', '未知类型')
+            from_wxid_display = message.get('FromWxid', '未知来源')
+            logger.info(f"成功转发应用消息: {msg_type_display} from {from_wxid_display} to {self.target_wxid}")
+            
+        except Exception as e:
+            logger.error(f"转发应用消息失败: {e}")
 
     def _parse_card_xml(self, xml_string: str) -> Optional[dict]:
         """解析名片XML内容，提取关键信息"""
